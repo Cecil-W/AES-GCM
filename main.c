@@ -1,0 +1,182 @@
+#include "aes-128.h"
+#include "gcm.h"
+#include "test.h"
+
+
+
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+
+
+static __uint8_t expanded_key[4*Nb*(Nr+1)];
+void test_aes() {
+    // the measure execution time
+    clock_t start, end;
+    double cpu_time_used;
+
+    state_t input = {
+        {0x00, 0x11, 0x22, 0x33},
+        {0x44, 0x55, 0x66, 0x77},
+        {0x88, 0x99, 0xaa, 0xbb},
+        {0xcc, 0xdd, 0xee, 0xff}
+    };
+
+    char test[] = {0x00, 0x11, 0x22, 0x33,
+                 0x44, 0x55, 0x66, 0x77,
+                 0x88, 0x99, 0xaa, 0xbb,
+                 0xcc, 0xdd, 0xee, 0xff};
+
+    char in[] = {0x00, 0x11, 0x22, 0x33,
+                 0x44, 0x55, 0x66, 0x77,
+                 0x88, 0x99, 0xaa, 0xbb,
+                 0xcc, 0xdd, 0xee, 0xff};
+
+    __uint8_t key[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+        0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    
+    aes_key_expansion(key, expanded_key);
+    start = clock();
+    aes_cipher((state_t*)in, expanded_key);
+    end = clock();
+
+    aes_inv_cipher((state_t*)in, expanded_key);
+    cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("\nAES:\nTime taken for encrypt(aes): %lf\n", cpu_time_used);
+    if (memcmp(in, test, 16) == 0) {
+        printf("Encrypted and decrypted Text matches the input!");
+    }
+}
+
+
+void test_gcm_funcs(){
+
+        uint8_t H[16] = {0x66, 0xe9, 0x4b, 0xd4, 0xef, 0x8a, 0x2c, 0x3b, 0x88, 0x4c, 0xfa, 0x59, 0xca, 0x34, 0x2b, 0x2e};
+        uint8_t C[16] = {0x03, 0x88, 0xda, 0xce, 0x60, 0xb6, 0xa3, 0x92, 0xf3, 0x28, 0xc2, 0xb9, 0x71, 0xb2, 0xfe, 0x78};
+
+        uint8_t TE[16];
+        gcm_block_mul(C, H, TE);
+        uint8_t ID[] = {0x66, 0xe9, 0x4b, 0xd4};
+        uint8_t IV[12];
+        uint64_t x = 13785220964443252;
+        IV_construct(ID, x, IV);
+}
+
+
+void test_gcm(){
+    printf("\n\nGCM test cases (gcm-spec):");
+    //test case 1
+    gcm_encrypt(key1, IV1, 96, P1, 0, A1, 0, C1, T1, 128);
+    test_debug(T1_test, T1, 16, "T1");
+    //test case 2
+    gcm_encrypt(key2, IV2, 96, P2, 128, A2, 0, C2, T2, 128);
+    test_debug(T2_test, T2, 16, "T2");
+    test_debug(C2_test, C2, 16, "C2");
+    //test case 3
+    gcm_encrypt(key3, IV3, 96, P3, 128*4, A3, 0, C3, T3, 128);
+    test_debug(T3_test, T3, 16, "T3");
+    test_debug(C3_test, C3, 16*4, "C3");
+    //test case 4
+    gcm_encrypt(key4_, IV4_, 96, P4_, len_P4_*8, A4_, len_A4_*8, C4_, T4_, 128);
+    test_debug(T4_test_, T4_, 16, "T4");
+    test_debug(C4_test_, C4_, 16*4, "C4");
+
+    //test case 5
+    gcm_encrypt(key5, IV5, 8*len_IV5, P5, len_P5*8, A5, len_A5*8, C5, T5, 128);
+    test_debug(T5_test, T5, 16, "T5");
+    test_debug(C5_test, C5, 16*4, "C5");
+    //test case 6
+    gcm_encrypt(key6, IV6, 8*len_IV6, P6, len_P6*8, A6, len_A6*8, C6, T6, 128);
+    test_debug(T6_test, T6, 16, "T6");
+    test_debug(C6_test, C6, 16*4, "C6");
+
+    //test case 3 reverse
+    uint8_t P3_reverse[16*4];
+    gcm_encrypt(key3, IV3, 96, P3, 128*4, A3, 0, C3, T3, 128);
+    if(gcm_decrypt(key3, IV3, 96, P3_reverse, 128*4, A3, 0, C3, T3, 128)) printf("\ntag 3 is correct");
+    test_debug(P3_reverse, P3, 16*4, "P3 reversed");
+    //test case 5 reverse
+    uint8_t P5_reverse[16*3+12];
+    gcm_encrypt(key5, IV5, (16*3+12)*8, P5, (16*3+12)*8, A5, 20*8, C5, T5, 128);
+    if(gcm_decrypt(key5, IV5, (16*3+12)*8, P5_reverse, (16*3+12)*8, A5, 20*8, C5, T5, 128)) printf("\ntag 5 is correct");
+    test_debug(P5_reverse, P5, (16*3+12), "P5 reversed");
+    //test case 6 reverse
+    uint8_t P6_reverse[16*3+12];
+    gcm_encrypt(key6, IV6, (16*3+12)*8, P6, (16*3+12)*8, A6, 20*8, C6, T6, 128);
+    if(gcm_decrypt(key6, IV6, (16*3+12)*8, P6_reverse, (16*3+12)*8, A6, 20*8, C6, T6, 128)) printf("\ntag 6 is correct");
+    test_debug(P6_reverse, P6, (16*3+12), "P6 reversed");
+}
+
+
+void decrypt_robotControl4(){
+    uint8_t P[lenP4/8];
+    if(gcm_decrypt(key4, iv4, lenIV4, P, lenP4, aad4, lenAAD4, cipher4, tag4, lenTAG4)){
+        printf("\n\nrobotControlSolution: \n%s", P);
+        printf("\nTags match\n");
+    }
+
+}
+
+void decrypt_robo_msg(){
+    uint8_t P_msg[21];
+    static uint8_t key_msg[] = {0x4e,0x95,0x36,0xf9,0xc8,0xd3,0x45,0xd0,0x7f,0x96,0x63,0x4f,0x99,0x4d,0x47,0x80};
+    uint8_t IV_msg[] = {0x04, 0x10, 0x09, 0x08, 0x07, 0x06, 0x05, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a};
+    u_int8_t robo_msg[57] = {0x39, 0x01, 0xd4, 0x44, 0x43, 0xf2, 0xff, 0x6a, 0xfa, 0x6d, 0xd0, 0x18, 0x49, 0xe7, 0xdb, 0x12,
+                             0x04, 0x10, 0x09, 0x08, 0x07, 0x06, 0x05, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a,
+                             0x3b, 0x10, 0x5a, 0xd6, 0x00, 0x00, 0x00, 0x00,
+                             0x77, 0x7e, 0xc8, 0x2a, 0x1b, 0xeb, 0xe9, 0xb9, 0xdb, 0x7e, 0x90, 0x55, 0x34, 0x4f, 0x28, 0x05,
+                             0xf6, 0x36, 0x9e, 0x0e, 0x0e};
+    uint8_t C_msg[21];
+    memcpy(C_msg, robo_msg+36, 21);
+    uint8_t AAD_msg[21];
+    memcpy(AAD_msg, robo_msg+28, 8);
+    uint8_t TAG_msg[16];
+    memcpy(TAG_msg, robo_msg, 16);
+    if(gcm_decrypt(key_msg, IV_msg, 96, P_msg, 21*8, AAD_msg, 64, C_msg, TAG_msg, 128)){
+        printf("TAGS are correct\n");
+    }
+    printf("\n%s", P_msg);
+    printf("\naad_end: %s", AAD_msg);
+}
+
+void encrypt_robo_msg(){
+    uint8_t P_msg[] = "InitializeStartRobot";
+    static uint8_t key_msg[] = {0x4e,0x95,0x36,0xf9,0xc8,0xd3,0x45,0xd0,0x7f,0x96,0x63,0x4f,0x99,0x4d,0x47,0x80};
+    uint8_t IV_msg[] = {0x04, 0x10, 0x09, 0x08, 0x07, 0x06, 0x05, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a};
+
+    uint8_t C_msg[21] = {};
+    uint8_t AAD_msg[] = {0xbf, 0xbe, 0xaa, 0x4d, 0x00, 0x00, 0x00, 0x0b};
+//    uint8_t AAD_msg[] = {0xa5, 0x21, 0xc5, 0xda, 0x00, 0x00, 0x00, 0x00,};
+    uint8_t TAG_msg[16];
+    gcm_encrypt(key_msg, IV_msg, 96, P_msg, 21*8, AAD_msg, 64, C_msg, TAG_msg, 128);
+
+    //msg_sensortag
+    //0x0a, 0x8a, 0x78, 0x98, 0xdd, 0x41, 0xf0, 0xdc, 0x4d, 0xd2, 0x49, 0x93, 0x37, 0x2a, 0xe9, 0xf9,
+    //0x04, 0x10, 0x09, 0x08, 0x07, 0x06, 0x05, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a,
+    //0xa5, 0x21, 0xc5, 0xda, 0x00, 0x00, 0x00, 0x00,
+    //0x4a, 0x4f, 0xae, 0xf6, 0xbe, 0x6a, 0x91, 0x55, 0xf7, 0x90, 0x7d, 0x1d, 0x98, 0x1d, 0x28, 0x9a,
+    //0x64, 0xd0, 0x9b, 0x89, 0x17
+
+    //new sensortag msg
+    //0xc3, 0x6c, 0xe1, 0x21, 0xa2, 0x78, 0x83, 0x37, 0x75, 0xff, 0x14, 0xa7, 0x50, 0x66, 0x62, 0x82,
+    //0x04, 0x10, 0x09, 0x08, 0x07, 0x06, 0x05, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a,
+    //0xbf, 0xbe, 0xaa, 0x4d, 0x00, 0x00, 0x00, 0x03,
+    //0x4a, 0x4f, 0xae, 0xf6, 0xbe, 0x6a, 0x91, 0x55, 0xf7, 0x90, 0x7d, 0x1d, 0x98, 0x1d, 0x28, 0x9a,
+    //0x64, 0xd0, 0x9b, 0x89, 0x17
+}
+
+
+int main() {
+    test_aes();
+    test_gcm();
+    //test_gcm_funcs();
+    decrypt_robotControl4();
+//    decrypt_robo_msg();
+//    encrypt_robo_msg();
+
+    return 0;
+}
+
+
+
